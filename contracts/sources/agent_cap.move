@@ -24,6 +24,7 @@ module guardrails::cap {
 
     const EOverDailyAllowance: u64  = 0;
     const EVenueNotAllowed:     u64  = 1;
+    #[allow(unused_const)]
     const ECapExpired:          u64  = 2;
     const ENotOwner:            u64  = 3;
 

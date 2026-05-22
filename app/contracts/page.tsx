@@ -140,7 +140,9 @@ export default function ContractsPage() {
               the Sui validator rejects the entire transaction — no app-level override is possible.
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 32 }}>
-              <Badge label="Testnet deployed" color="var(--mint)" />
+              <a href="https://suiscan.xyz/testnet/object/0x7296445f96f66bab5d5e3c6c5dbff5ad3e4d4d33727f0110e0e1b38d7e96d320" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                <Badge label="✓ Testnet deployed ↗" color="var(--mint)" />
+              </a>
               <Badge label="Move 2024" color="var(--sky)" />
               <Badge label="DeepBook v3" color="var(--butter)" />
               <Badge label="Walrus receipts" color="var(--rose)" />
@@ -179,13 +181,18 @@ export default function ContractsPage() {
           <div style={{ background: "var(--ink)", color: "var(--paper)", borderRadius: 24, padding: "28px 32px", marginTop: 40, display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ fontWeight: 800, fontSize: 18 }}>Deploy to Sui Testnet</div>
             <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, background: "rgba(0,0,0,0.3)", borderRadius: 12, padding: "14px 18px", lineHeight: 1.8 }}>
-              <span style={{ color: "#8b8498" }}># Install Sui CLI first: https://docs.sui.io/guides/developer/getting-started/sui-install</span><br />
-              <span style={{ color: "#6fcfa0" }}>sui</span> client switch --env testnet<br />
-              <span style={{ color: "#6fcfa0" }}>sui</span> client publish contracts/ --gas-budget 50000000
+              <span style={{ color: "#8b8498" }}># Deployed on Sui Testnet</span><br />
+              <span style={{ color: "#6fcfa0" }}>PackageID</span>{"  "}0x7296445f96f66bab5d5e3c6c5dbff5ad3e4d4d33727f0110e0e1b38d7e96d320<br />
+              <span style={{ color: "#6fcfa0" }}>Tx Digest</span>{"  "}F2ZZCcyV5XruyaKugYNxycKDPbH48K5eFBQfp5QPNFyF
             </div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>
-              After publishing, drop the package ID into <code style={{ fontFamily: "JetBrains Mono, monospace" }}>.env.local</code> as{" "}
-              <code style={{ fontFamily: "JetBrains Mono, monospace" }}>NEXT_PUBLIC_PACKAGE_ID</code> and the app will use real on-chain calls.
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <a href="https://suiscan.xyz/testnet/object/0x7296445f96f66bab5d5e3c6c5dbff5ad3e4d4d33727f0110e0e1b38d7e96d320" target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "var(--mint)", fontWeight: 700, textDecoration: "none" }}>
+                View package on Suiscan ↗
+              </a>
+              <span style={{ color: "rgba(255,255,255,0.3)" }}>·</span>
+              <a href="https://suiscan.xyz/testnet/tx/F2ZZCcyV5XruyaKugYNxycKDPbH48K5eFBQfp5QPNFyF" target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#7bb8ff", fontWeight: 700, textDecoration: "none" }}>
+                View publish tx ↗
+              </a>
             </div>
           </div>
         </div>

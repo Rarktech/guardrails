@@ -19,7 +19,7 @@ module guardrails::audit {
     // ── Structs ───────────────────────────────────────────────────────────────
 
     /// Emitted for every agent decision (allowed or blocked).
-    public struct ActionRecord has copy, drop {
+    public struct ActionRecord has copy, drop, store {
         /// The AgentCap object that signed (or was checked against).
         cap_id:       ID,
         /// "buy" | "sell" | "swap" | "stop"
