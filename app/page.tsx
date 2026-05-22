@@ -7,19 +7,19 @@ const RECEIPTS = [
     kind: "ok", emoji: "🌊", title: "Bought $6 SUI",
     sub: "DeepBook v3 · trend follow · fill $1.84", time: "09:14:02",
     tx: "4xN7wKpYsRm2vQhUaGz9bF8eDcJtL3nP6kBvWfH5jXyq",
-    cid: "bafkreig7tnH3wKLNQa9_Z2vXdRpC8eMfYsHB6kJtL3nVPq", gas: 14286,
+    cid: "b0lXTbrlXbM-fq8_VY6u8fNE9chmqOFhMckSQ5x9poQ", gas: 14286,
   },
   {
     kind: "bad", emoji: "₿", title: "Blocked $72 BTC",
     sub: "Guardian: over per-tx allowance ($50 cap)", time: "09:14:31",
     tx: "9aXjQpRm2vKtL3nWfH5jBvE6cDsR7uN8kPbZyM4xQwLh",
-    cid: "bafkreif8jR2pQa9_Z2vKdRpC8eMfYsHB6kJtL3nVPqXdR9", gas: 2104,
+    cid: "wwd_I5rR1irkAH9pGGt-sT7sh9qrw67HT1-Wz2vFKGQ", gas: 2104,
   },
   {
     kind: "ok", emoji: "⟠", title: "Bought $4 ETH",
     sub: "DeepBook v3 · momentum up · fill $3,210", time: "09:14:18",
     tx: "7pBkR3jX9vQa2mKtL3nWfH5jBvE6cDsR7uN8kPbZyM4x",
-    cid: "bafkreih2nR3wKpQa9_Z2vXdRpC8eMfYsHB6kJtL3nVPqXd", gas: 13891,
+    cid: "WYqGMnt93fAvQCsWAUrQLWDQE1SP05ghwLmXJPAaEkk", gas: 13891,
   },
 ];
 

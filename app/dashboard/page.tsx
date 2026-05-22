@@ -96,9 +96,9 @@ function ReviewSheet({ intent, ctx, onSign, onCancel }: {
 
 function seedReceipts(): ReceiptItem[] {
   return [
-    withProofs<ReceiptItem>({ id: 1, kind: "ok", emoji: "🌊", text: "Bought $6 SUI · trend follow", time: "09:14", badge: "OK", payload: { v: 1, kind: "execution", venue: "DeepBook v3", side: "buy", asset: "SUI", amountUsd: 6, fillPrice: 1.842, slippageBps: 12 }, payloadBytes: 348 }),
-    withProofs<ReceiptItem>({ id: 2, kind: "bad", emoji: "₿", text: "Blocked $72 BTC · over allowance", time: "09:14", badge: "BLOCKED", payload: { v: 1, kind: "guardian_block", rule: "per_tx_cap", attempted: { asset: "BTC", amountUsd: 72 }, cap: 50 }, payloadBytes: 226, gas: 0 }),
-    withProofs<ReceiptItem>({ id: 3, kind: "ok", emoji: "⟠", text: "Bought $4 ETH · momentum up", time: "09:14", badge: "OK", payload: { v: 1, kind: "execution", venue: "DeepBook v3", side: "buy", asset: "ETH", amountUsd: 4, fillPrice: 3210.55, slippageBps: 7 }, payloadBytes: 334 }),
+    withProofs<ReceiptItem>({ id: 1, kind: "ok", emoji: "🌊", text: "Bought $6 SUI · trend follow", time: "09:14", badge: "OK", walrusCid: "b0lXTbrlXbM-fq8_VY6u8fNE9chmqOFhMckSQ5x9poQ", txDigest: "4xN7wKpYsRm2vQhUaGz9bF8eDcJtL3nP6kBvWfH5jXyq", payload: { v: 1, kind: "execution", venue: "DeepBook v3", side: "buy", asset: "SUI", amountUsd: 6, fillPrice: 1.842, slippageBps: 12 }, payloadBytes: 711 }),
+    withProofs<ReceiptItem>({ id: 2, kind: "bad", emoji: "₿", text: "Blocked $72 BTC · over allowance", time: "09:14", badge: "BLOCKED", walrusCid: "wwd_I5rR1irkAH9pGGt-sT7sh9qrw67HT1-Wz2vFKGQ", txDigest: "9aXjQpRm2vKtL3nWfH5jBvE6cDsR7uN8kPbZyM4xQwLh", payload: { v: 1, kind: "guardian_block", rule: "per_tx_cap", attempted: { asset: "BTC", amountUsd: 72 }, cap: 50 }, payloadBytes: 611, gas: 0 }),
+    withProofs<ReceiptItem>({ id: 3, kind: "ok", emoji: "⟠", text: "Bought $4 ETH · momentum up", time: "09:14", badge: "OK", walrusCid: "WYqGMnt93fAvQCsWAUrQLWDQE1SP05ghwLmXJPAaEkk", txDigest: "7pBkR3jX9vQa2mKtL3nWfH5jBvE6cDsR7uN8kPbZyM4x", payload: { v: 1, kind: "execution", venue: "DeepBook v3", side: "buy", asset: "ETH", amountUsd: 4, fillPrice: 3210.55, slippageBps: 7 }, payloadBytes: 711 }),
   ];
 }
 
