@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
+    "@google/generative-ai": "^0.24.1",
     "@mysten/sui": "^1.0.0",
     "@mysten/zklogin": "^0.3.0",
     "clsx": "^2.1.1",
