@@ -1,8 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY ?? "");
 
 export interface ParsedIntent {
   action: "Buy" | "Sell" | "Swap" | "Stop";
@@ -15,29 +13,28 @@ export interface ParsedIntent {
 }
 
 export async function parseIntentWithClaude(userText: string): Promise<ParsedIntent> {
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 256,
-    system: `You are an intent parser for a crypto trading agent called Guardrails.
-Parse user input into a structured trading intent JSON.
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(
+      `You are an intent parser for a crypto trading agent called Guardrails.
+Parse the user input into a structured JSON trading intent.
 Supported assets: SUI, ETH, BTC, USDC, SOL.
 Supported actions: Buy, Sell, Swap, Stop.
-Return ONLY valid JSON matching the ParsedIntent interface.`,
-    messages: [
-      {
-        role: "user",
-        content: `Parse this trading intent: "${userText}"
-Return JSON with: action, amount (number), asset, swapTo (if swap), condition (object with type: now|dip|above|schedule), confidence (0-1), raw (original text).`,
-      },
-    ],
-  });
+Return ONLY valid JSON with these fields:
+- action: "Buy"|"Sell"|"Swap"|"Stop"
+- amount: number (USD amount)
+- asset: string
+- swapTo: string (only for Swap)
+- condition: { type: "now"|"dip"|"above"|"schedule", pct?: number, value?: number, unit?: string }
+- confidence: number 0-1
+- raw: the original text
 
-  const text = message.content[0].type === "text" ? message.content[0].text : "";
-  try {
-    const json = JSON.parse(text.replace(/```json\n?|\n?```/g, "").trim());
+User input: "${userText}"`
+    );
+    const text = result.response.text().replace(/```json\n?|\n?```/g, "").trim();
+    const json = JSON.parse(text);
     return { ...json, raw: userText };
   } catch {
-    // Fallback to local parsing
     return parseIntentLocal(userText);
   }
 }
@@ -46,18 +43,16 @@ export async function generateAgentReasoning(
   intent: ParsedIntent,
   marketContext: { price: number; poolDepth: number; allowanceLeft: number }
 ): Promise<string> {
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 150,
-    system: "You are Buddy, a friendly AI trading agent. Explain your reasoning for a trade in 1-2 sentences. Be concise and plain-English.",
-    messages: [
-      {
-        role: "user",
-        content: `Intent: ${intent.action} $${intent.amount} ${intent.asset}. Price: $${marketContext.price}. Pool depth: $${marketContext.poolDepth.toLocaleString()}. Allowance left: $${marketContext.allowanceLeft}. Explain your reasoning.`,
-      },
-    ],
-  });
-  return message.content[0].type === "text" ? message.content[0].text : "Executing trade as instructed.";
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(
+      `You are Buddy, a friendly AI trading agent. Explain your reasoning for a trade in 1-2 sentences. Be concise and plain-English.
+Intent: ${intent.action} $${intent.amount} ${intent.asset}. Price: $${marketContext.price}. Pool depth: $${marketContext.poolDepth.toLocaleString()}. Allowance left: $${marketContext.allowanceLeft}.`
+    );
+    return result.response.text();
+  } catch {
+    return "Executing trade as instructed.";
+  }
 }
 
 function parseIntentLocal(text: string): ParsedIntent {
