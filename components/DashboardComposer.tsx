@@ -6,13 +6,6 @@ export const ASSET_EMOJI: Record<string, string> = {
   SUI: "🌊", ETH: "⟠", BTC: "₿", USDC: "💵", SOL: "🟣",
 };
 
-const VOICE_PHRASES = [
-  "Buy twenty dollars of SUI if it drops five percent",
-  "Sell ten dollars of ETH when it hits four thousand",
-  "Buy five dollars of BTC every day this week",
-  "Swap fifty USDC into SUI right now",
-];
-
 export interface Condition {
   type: "now" | "dip" | "above" | "schedule";
   pct?: number;
@@ -217,50 +210,97 @@ export function DashboardComposer({ onSubmit, buddyName = "Buddy" }: {
   const [intent, setIntent] = useState<Intent | null>(null);
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const phraseIdx = useRef(0);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(true);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const transcriptRef = useRef("");
 
-  function clearTimers() {
-    timers.current.forEach(t => clearTimeout(t));
-    timers.current = [];
-  }
-  useEffect(() => () => clearTimers(), []);
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    setVoiceSupported(!!(w.SpeechRecognition || w.webkitSpeechRecognition));
+  }, []);
 
   function startRecording() {
-    clearTimers();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR: (new () => any) | undefined = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) {
+      setVoiceSupported(false);
+      setTab("text");
+      return;
+    }
     setIntent(null);
     setTranscript("");
+    transcriptRef.current = "";
     setRecording(true);
-    const phrase = VOICE_PHRASES[phraseIdx.current % VOICE_PHRASES.length];
-    phraseIdx.current += 1;
-    const words = phrase.split(" ");
-    let acc = "";
-    words.forEach((w, i) => {
-      timers.current.push(setTimeout(() => {
-        acc = acc ? acc + " " + w : w;
-        setTranscript(acc);
-      }, 180 + i * 220));
-    });
+
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (e: any) => {
+      const t = Array.from(e.results)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((r: any) => r[0].transcript)
+        .join("");
+      transcriptRef.current = t;
+      setTranscript(t);
+    };
+
+    recognition.onend = () => {
+      setRecording(false);
+      const final = transcriptRef.current;
+      if (final) submitIntent(final);
+    };
+
+    recognition.onerror = () => {
+      setRecording(false);
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
   }
 
   function stopRecording() {
-    clearTimers();
-    setRecording(false);
-    const final = transcript;
-    if (final) {
-      setTimeout(() => {
-        const parsed = parseIntent(final);
-        if (parsed) setIntent(parsed);
-      }, 250);
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
   }
 
-  function submitText() {
+  async function submitIntent(rawText: string) {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: rawText }),
+      });
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+      if (data.intent) {
+        setIntent({ ...data.intent, raw: rawText });
+        return;
+      }
+    } catch {
+      // fall back to local parsing
+    } finally {
+      setLoading(false);
+    }
+    const parsed = parseIntent(rawText);
+    if (parsed) setIntent(parsed);
+  }
+
+  async function submitText() {
     const t = text.trim();
     if (!t) return;
-    const parsed = parseIntent(t);
-    if (parsed) { setIntent(parsed); setTranscript(t); }
+    setTranscript(t);
+    await submitIntent(t);
   }
 
   const suggestions = [
@@ -279,44 +319,57 @@ export function DashboardComposer({ onSubmit, buddyName = "Buddy" }: {
 
       {tab === "voice" && (
         <div className="voice-stage">
-          <div
-            className={`mic ${recording ? "recording" : ""}`}
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onMouseLeave={() => recording && stopRecording()}
-            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
-            role="button"
-            aria-label="Hold to record"
-          >
-            <span className="pulse" />
-            <span className="pulse p2" />
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="3" width="6" height="12" rx="3" fill="#1f1a24" />
-              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="#1f1a24" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
-          {recording ? (
-            <>
-              <div className="waveform">
-                <span /><span /><span /><span /><span /><span /><span />
-              </div>
-              <div className="transcript">{transcript || "Listening…"}{transcript && <span className="caret" />}</div>
-            </>
-          ) : transcript && !intent ? (
-            <div className="mic-hint" style={{ marginTop: 22 }}>
-              <div className="transcript" style={{ marginTop: 0 }}>&ldquo;{transcript}&rdquo;</div>
-              <div style={{ marginTop: 8 }}>thinking…</div>
-            </div>
-          ) : !intent ? (
-            <div className="mic-hint">
-              <b>Hold</b> the button and tell {buddyName} what to do.<br />
-              <span style={{ opacity: .7 }}>try: &ldquo;buy twenty dollars of SUI if it drops five percent&rdquo;</span>
+          {!voiceSupported ? (
+            <div className="mic-hint" style={{ color: "var(--ink-soft)" }}>
+              Voice input isn&apos;t supported in this browser. Use the <b>Type it</b> tab, or open in Chrome.
             </div>
           ) : (
-            <div className="mic-hint">
-              <div className="transcript" style={{ marginTop: 0 }}>&ldquo;{transcript}&rdquo;</div>
-            </div>
+            <>
+              <div
+                className={`mic ${recording ? "recording" : ""}`}
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onMouseLeave={() => recording && stopRecording()}
+                onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+                onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
+                role="button"
+                aria-label="Hold to record"
+              >
+                <span className="pulse" />
+                <span className="pulse p2" />
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="9" y="3" width="6" height="12" rx="3" fill="#1f1a24" />
+                  <path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="#1f1a24" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </div>
+              {recording ? (
+                <>
+                  <div className="waveform">
+                    <span /><span /><span /><span /><span /><span /><span />
+                  </div>
+                  <div className="transcript">{transcript || "Listening…"}{transcript && <span className="caret" />}</div>
+                </>
+              ) : loading ? (
+                <div className="mic-hint">
+                  <div className="transcript" style={{ marginTop: 0 }}>&ldquo;{transcript}&rdquo;</div>
+                  <div style={{ marginTop: 8, color: "var(--ink-soft)" }}>Thinking with Gemini…</div>
+                </div>
+              ) : transcript && !intent ? (
+                <div className="mic-hint" style={{ marginTop: 22 }}>
+                  <div className="transcript" style={{ marginTop: 0 }}>&ldquo;{transcript}&rdquo;</div>
+                  <div style={{ marginTop: 8 }}>thinking…</div>
+                </div>
+              ) : !intent ? (
+                <div className="mic-hint">
+                  <b>Hold</b> the button and tell {buddyName} what to do.<br />
+                  <span style={{ opacity: .7 }}>try: &ldquo;buy twenty dollars of SUI if it drops five percent&rdquo;</span>
+                </div>
+              ) : (
+                <div className="mic-hint">
+                  <div className="transcript" style={{ marginTop: 0 }}>&ldquo;{transcript}&rdquo;</div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -332,7 +385,9 @@ export function DashboardComposer({ onSubmit, buddyName = "Buddy" }: {
             rows={3}
           />
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="btn coral" onClick={submitText} disabled={!text.trim()}>Read it back to me →</button>
+            <button className="btn coral" onClick={submitText} disabled={!text.trim() || loading}>
+              {loading ? "Thinking…" : "Read it back to me →"}
+            </button>
             <span style={{ color: "var(--ink-soft)", fontSize: 13 }}>or press <b>Enter</b></span>
           </div>
           <div>
@@ -341,10 +396,7 @@ export function DashboardComposer({ onSubmit, buddyName = "Buddy" }: {
               {suggestions.map(s => (
                 <button key={s} className="sugg" onClick={() => {
                   setText(s);
-                  setTimeout(() => {
-                    const p = parseIntent(s);
-                    if (p) { setIntent(p); setTranscript(s); }
-                  }, 50);
+                  setTimeout(() => submitIntent(s), 50);
                 }}>{s}</button>
               ))}
             </div>

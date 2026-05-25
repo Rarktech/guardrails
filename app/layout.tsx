@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import dynamic from "next/dynamic";
+
+const Providers = dynamic(() => import("./providers"), { ssr: false });
 
 export const metadata: Metadata = {
   title: "Guardrails — Give your AI an allowance",
@@ -22,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body><Providers>{children}</Providers></body>
     </html>
   );
 }

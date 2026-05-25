@@ -1,4 +1,7 @@
 "use client";
+import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { generateNonce, generateRandomness } from "@mysten/zklogin";
 
 export interface ZkLoginSession {
   address: string;
@@ -24,10 +27,21 @@ export function getGoogleAuthUrl(nonce: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-export function generateNonce(): string {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return Array.from(arr, b => b.toString(16).padStart(2, "0")).join("");
+export async function startZkLogin(): Promise<void> {
+  if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.includes("your_google")) {
+    throw new Error("NEXT_PUBLIC_GOOGLE_CLIENT_ID is not configured.");
+  }
+  const client = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl("testnet"), network: "testnet" });
+  const { epoch } = await client.getLatestSuiSystemState();
+  const maxEpoch = Number(epoch) + 2;
+  const ephemeralKP = new Ed25519Keypair();
+  const randomness = generateRandomness();
+  const nonce = generateNonce(ephemeralKP.getPublicKey(), maxEpoch, randomness);
+  // Store state needed to complete the flow after the OAuth redirect
+  localStorage.setItem("zk_eph_key", Buffer.from(ephemeralKP.getSecretKey()).toString("hex"));
+  localStorage.setItem("zk_randomness", randomness.toString());
+  localStorage.setItem("zk_max_epoch", maxEpoch.toString());
+  window.location.href = getGoogleAuthUrl(nonce);
 }
 
 export function saveSession(session: ZkLoginSession): void {
@@ -50,6 +64,10 @@ export function clearSession(): void {
     localStorage.removeItem("gr_session");
     localStorage.removeItem("gr_buddy");
     localStorage.removeItem("gr_cap_exp");
+    localStorage.removeItem("zk_eph_key");
+    localStorage.removeItem("zk_randomness");
+    localStorage.removeItem("zk_max_epoch");
+    localStorage.removeItem("zk_proof");
   } catch {}
 }
 

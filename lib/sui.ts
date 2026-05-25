@@ -1,10 +1,10 @@
-import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
+import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 
 export const NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as "testnet" | "mainnet" | "devnet") ?? "testnet";
-export const SUI_RPC = process.env.NEXT_PUBLIC_SUI_RPC ?? getFullnodeUrl(NETWORK);
+export const SUI_RPC = process.env.NEXT_PUBLIC_SUI_RPC ?? getJsonRpcFullnodeUrl(NETWORK);
 
-export const suiClient = new SuiClient({ url: SUI_RPC });
+export const suiClient = new SuiJsonRpcClient({ url: SUI_RPC, network: NETWORK });
 
 export const PACKAGE_ID = process.env.NEXT_PUBLIC_PACKAGE_ID ?? "0x0";
 
@@ -59,5 +59,7 @@ export function usdToMist(usd: number, suiPriceUsd = 4.18): bigint {
   return BigInt(Math.floor((usd / suiPriceUsd) * 1_000_000_000));
 }
 
+export const RECEIPT_REGISTRY_ID = "0xd5375f3d5350df87ff0f196d67f2d1db1fcc94d67cffec9ca4dc8483e7eccde9";
 export const DEEPBOOK_PACKAGE = "0x000000000000000000000000000000000000000000000000000000000000dee9";
 export const SUI_USDC_POOL = "0x4405b50d791fd3346754e8171aaab6bc2ed26c2c46efdd033c14b30ae507ac33";
+export const DEEPBOOK_POOL_SUI_USDC = SUI_USDC_POOL;

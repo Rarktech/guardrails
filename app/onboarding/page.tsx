@@ -2,6 +2,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { buildMintCapTx } from "@/lib/contracts";
+import { usdToMist, DEEPBOOK_POOL_SUI_USDC } from "@/lib/sui";
 
 const COLORS = [
   { label: "Coral", value: "var(--coral)", css: "#ff7a59" },
@@ -25,29 +28,50 @@ const NAME_SUGGESTIONS = ["Buddy", "Max", "Sage", "Chip", "Blaze", "Nova"];
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const account = useCurrentAccount();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
+
   const [step, setStep] = useState(0);
   const [name, setName] = useState("Buddy");
   const [color, setColor] = useState(COLORS[0]);
   const [personality, setPersonality] = useState(PERSONALITIES[1]);
   const [allowance, setAllowance] = useState(50);
+  const [minting, setMinting] = useState(false);
 
   const TOTAL_STEPS = 3;
 
-  function saveBuddy() {
+  async function saveBuddy() {
     try {
       localStorage.setItem("gr_buddy", JSON.stringify({ name, color: color.css, personality: personality.id, allowance }));
     } catch {}
+
+    // Attempt real on-chain AgentCap mint if wallet is connected
+    if (account) {
+      setMinting(true);
+      try {
+        const dailyCapMist = usdToMist(allowance);
+        const tx = buildMintCapTx(
+          dailyCapMist,
+          [DEEPBOOK_POOL_SUI_USDC],
+          personality.id,
+        );
+        await signAndExecute({ transaction: tx });
+      } catch (err) {
+        console.warn("AgentCap mint failed, continuing without on-chain cap:", err);
+      } finally {
+        setMinting(false);
+      }
+    }
+
     router.push("/dashboard");
   }
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, position: "relative", overflow: "hidden" }}>
-      {/* bg blobs */}
       <div style={{ position: "fixed", borderRadius: "50%", filter: "blur(60px)", opacity: 0.4, pointerEvents: "none", background: "var(--coral)", width: 300, height: 300, top: -80, right: -80 }} />
       <div style={{ position: "fixed", borderRadius: "50%", filter: "blur(60px)", opacity: 0.4, pointerEvents: "none", background: "var(--mint)", width: 280, height: 280, bottom: -60, left: -60 }} />
 
       <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 460 }}>
-        {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <Link href="/" className="brand" style={{ justifyContent: "center" }}>
             <span className="brand-mark">G</span>
@@ -55,7 +79,6 @@ export default function OnboardingPage() {
           </Link>
         </div>
 
-        {/* Progress dots */}
         <div className="dots" style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 24 }}>
           {Array.from({ length: TOTAL_STEPS }, (_, i) => (
             <span key={i} style={{
@@ -66,10 +89,8 @@ export default function OnboardingPage() {
           ))}
         </div>
 
-        {/* Card */}
         <div className="card" style={{ borderRadius: 28, padding: "28px 24px", boxShadow: "8px 8px 0 rgba(31,26,36,0.9)" }}>
 
-          {/* Step 0 — Name + color */}
           {step === 0 && (
             <>
               <h3 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 8px" }}>
@@ -79,7 +100,6 @@ export default function OnboardingPage() {
                 Give your AI agent a name and a look. You can change this anytime.
               </p>
 
-              {/* Avatar preview */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, margin: "12px 0 22px" }}>
                 <div style={{
                   width: 120, height: 120, borderRadius: 30, background: color.css,
@@ -104,7 +124,6 @@ export default function OnboardingPage() {
                 ))}
               </div>
 
-              {/* Color picker */}
               <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--ink-soft)", marginBottom: 10 }}>Pick a color</div>
               <div className="swatch-row">
                 {COLORS.map(c => (
@@ -121,7 +140,6 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {/* Step 1 — Personality */}
           {step === 1 && (
             <>
               <h3 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 8px" }}>
@@ -143,14 +161,16 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {/* Step 2 — Allowance */}
           {step === 2 && (
             <>
               <h3 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 8px" }}>
                 Set <span className="scribble" style={{ color: "var(--coral-deep)" }}>{name}&apos;s</span> daily limit
               </h3>
               <p style={{ color: "var(--ink-soft)", fontSize: 15, lineHeight: 1.5, margin: "0 0 8px" }}>
-                This becomes an on-chain AgentCap object. {name} literally cannot spend more.
+                {account
+                  ? `This mints an on-chain AgentCap object. ${name} literally cannot spend more.`
+                  : `This sets your spending limit. Connect a wallet to enforce it on-chain.`
+                }
               </p>
 
               <div style={{ fontSize: 64, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1, textAlign: "center", margin: "18px 0 8px" }}>
@@ -164,7 +184,6 @@ export default function OnboardingPage() {
                 <span>$10</span><span>$100</span><span>$250</span><span>$500</span>
               </div>
 
-              {/* Summary */}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {[
                   { label: "AgentCap.budget", value: `${(allowance * 1_000_000).toLocaleString()} MIST/day`, type: "u64" },
@@ -181,7 +200,6 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {/* Actions */}
           <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
             {step > 0 && (
               <button className="btn ghost" onClick={() => setStep(s => s - 1)} style={{ flex: 0 }}>← Back</button>
@@ -189,8 +207,8 @@ export default function OnboardingPage() {
             {step < TOTAL_STEPS - 1 ? (
               <button className="btn coral" onClick={() => setStep(s => s + 1)} style={{ flex: 1, justifyContent: "center" }}>Next →</button>
             ) : (
-              <button className="btn coral" onClick={saveBuddy} style={{ flex: 1, justifyContent: "center" }}>
-                🚀 Mint AgentCap & Start
+              <button className="btn coral" onClick={saveBuddy} disabled={minting} style={{ flex: 1, justifyContent: "center" }}>
+                {minting ? "Minting on-chain…" : account ? "🚀 Mint AgentCap & Start" : "🚀 Start (no wallet)"}
               </button>
             )}
           </div>

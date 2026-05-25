@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { DashboardComposer, type Intent, conditionText, ASSET_EMOJI } from "@/components/DashboardComposer";
 import { AgentCapCard } from "@/components/AgentCapCard";
 import { RulesCard, withRuleProofs, type Rule } from "@/components/RulesCard";
@@ -9,6 +10,12 @@ import { ActivityFeed, type ReceiptItem } from "@/components/ReceiptFeed";
 import { GuardianCard, evalRisks } from "@/components/Guardian";
 import { PTBPreview } from "@/components/PTBPreview";
 import { withProofs, shortId } from "@/lib/utils";
+import { buildLogTx } from "@/lib/contracts";
+import { uploadAuditLog } from "@/lib/walrus";
+import { loadSession } from "@/lib/zklogin";
+
+const RECEIPT_REGISTRY_ID = "0xd5375f3d5350df87ff0f196d67f2d1db1fcc94d67cffec9ca4dc8483e7eccde9";
+const DEEPBOOK_SUI_USDC = "0x4405b50d791fd3346754e8171aaab6bc2ed26c2c46efdd033c14b30ae507ac33";
 
 const ORACLE_PRICES: Record<string, { px: number }> = {
   SUI: { px: 4.18 }, ETH: { px: 3812.40 }, BTC: { px: 67240 }, SOL: { px: 174.20 }, USDC: { px: 1.00 },
@@ -18,17 +25,17 @@ function timeNow() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function intentToFeedItem(intent: Intent, id: number): ReceiptItem {
+function intentToFeedItem(intent: Intent, id: number, txDigest?: string, walrusCid?: string): ReceiptItem {
   const emoji = intent.action === "Stop" ? "🛑" : (ASSET_EMOJI[intent.asset ?? "SUI"] ?? "💰");
   const basePayload = {
     v: 1,
     intent: { action: intent.action, asset: intent.asset, amount: intent.amount, swapTo: intent.swapTo, condition: intent.condition },
     signedAt: new Date().toISOString(),
-    signer: "0x7a…f3",
+    signer: txDigest ? "wallet" : "0x7a…f3",
   };
 
   if (intent.action === "Stop") {
-    return withProofs<ReceiptItem>({ id, kind: "bad", emoji, text: "Buddy stopped on your command", time: timeNow(), badge: "REVOKED", payload: { ...basePayload, kind: "revocation" }, payloadBytes: 188 });
+    return withProofs<ReceiptItem>({ id, kind: "bad", emoji, text: "Buddy stopped on your command", time: timeNow(), badge: "REVOKED", payload: { ...basePayload, kind: "revocation" }, payloadBytes: 188, txDigest, walrusCid });
   }
 
   const tail = intent.action === "Swap" && intent.swapTo ? ` into ${intent.swapTo}` : "";
@@ -36,12 +43,12 @@ function intentToFeedItem(intent: Intent, id: number): ReceiptItem {
 
   if (isNow) {
     const verb = intent.action === "Sell" ? "Sold" : intent.action === "Swap" ? "Swapped" : "Bought";
-    return withProofs<ReceiptItem>({ id, kind: "ok", emoji, text: `${verb} $${intent.amount} ${intent.asset}${tail}`, time: timeNow(), badge: "OK", payload: { ...basePayload, kind: "execution", venue: "DeepBook v3" }, payloadBytes: 312 });
+    return withProofs<ReceiptItem>({ id, kind: "ok", emoji, text: `${verb} $${intent.amount} ${intent.asset}${tail}`, time: timeNow(), badge: "OK", payload: { ...basePayload, kind: "execution", venue: "DeepBook v3" }, payloadBytes: 312, txDigest, walrusCid });
   }
 
   const verb = intent.action === "Buy" ? "Will buy" : intent.action === "Sell" ? "Will sell" : "Will swap";
   const cond = conditionText(intent.condition);
-  return withProofs<ReceiptItem>({ id, kind: "new", emoji, text: `New rule — ${verb.toLowerCase()} $${intent.amount} ${intent.asset}${tail} ${cond}`, time: timeNow(), badge: "WAITING", payload: { ...basePayload, kind: "rule" }, payloadBytes: 264 });
+  return withProofs<ReceiptItem>({ id, kind: "new", emoji, text: `New rule — ${verb.toLowerCase()} $${intent.amount} ${intent.asset}${tail} ${cond}`, time: timeNow(), badge: "WAITING", payload: { ...basePayload, kind: "rule" }, payloadBytes: 264, txDigest, walrusCid });
 }
 
 function Toast({ msg }: { msg: string }) {
@@ -49,11 +56,12 @@ function Toast({ msg }: { msg: string }) {
   return <div className="toast">{msg}</div>;
 }
 
-function ReviewSheet({ intent, ctx, onSign, onCancel }: {
+function ReviewSheet({ intent, ctx, onSign, onCancel, signing }: {
   intent: Intent | null;
   ctx: { allowance: number; spent: number; recentCount: number };
   onSign: () => void;
   onCancel: () => void;
+  signing: boolean;
 }) {
   const risks = useMemo(() => intent ? evalRisks(intent, ctx) : [], [intent, ctx]);
   const blocks = risks.filter(r => r.severity === "block").length;
@@ -85,8 +93,8 @@ function ReviewSheet({ intent, ctx, onSign, onCancel }: {
           )}
           <span style={{ flex: 1 }} />
           <button className="btn ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn coral" onClick={onSign} disabled={blocks > 0}>
-            {intent.action === "Stop" ? "✋ Sign & revoke" : "✓ Sign & send"}
+          <button className="btn coral" onClick={onSign} disabled={blocks > 0 || signing}>
+            {signing ? "Signing…" : intent.action === "Stop" ? "✋ Sign & revoke" : "✓ Sign & send"}
           </button>
         </div>
       </div>
@@ -113,13 +121,25 @@ function seedRules(): Rule[] {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const account = useCurrentAccount();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
+
   const [buddy, setBuddy] = useState({ name: "Buddy", emoji: "🐷", color: "#ffc6b0", allowance: 50 });
   const [allowance, setAllowance] = useState(50);
   const [spent, setSpent] = useState(0);
   const [stopped, setStopped] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<Intent | null>(null);
   const [toast, setToast] = useState("");
+  const [signing, setSigning] = useState(false);
   const idRef = useRef(100);
+
+  // Determine display address: connected wallet > session > fallback
+  const [sessionAddress, setSessionAddress] = useState("0x7a…f3");
+  useEffect(() => {
+    const sess = loadSession();
+    if (sess?.address) setSessionAddress(shortId(sess.address));
+  }, []);
+  const displayAddress = account ? shortId(account.address) : sessionAddress;
 
   const [items, setItems] = useState<ReceiptItem[]>(() => {
     try {
@@ -159,10 +179,71 @@ export default function DashboardPage() {
     setTimeout(() => setToast(""), 2200);
   }
 
-  function handleSign() {
+  async function handleSign() {
     const intent = pendingIntent;
     if (!intent) return;
     const id = idRef.current++;
+    setSigning(true);
+
+    try {
+      if (account && intent.action !== "Stop") {
+        // Attempt real on-chain log transaction
+        const capId = localStorage.getItem("gr_cap_id") ?? account.address;
+        const venue = DEEPBOOK_SUI_USDC;
+        const amountUsd = BigInt(Math.round((intent.amount ?? 0) * 1_000_000));
+        const tx = buildLogTx(
+          RECEIPT_REGISTRY_ID,
+          capId,
+          intent.action,
+          amountUsd,
+          venue,
+          true,
+          new Uint8Array(0),
+        );
+
+        const result = await signAndExecute({ transaction: tx });
+        const txDigest = result.digest;
+
+        // Upload audit receipt to Walrus
+        let walrusCid: string | undefined;
+        try {
+          walrusCid = await uploadAuditLog({
+            v: 1,
+            agentId: capId,
+            action: intent.action,
+            amount: intent.amount ?? 0,
+            asset: intent.asset ?? "SUI",
+            venue,
+            allowed: true,
+            txDigest,
+            guardianChecks: [],
+            timestamp: new Date().toISOString(),
+            gasPaidBy: "user",
+          });
+        } catch {
+          // Walrus upload failure is non-fatal
+        }
+
+        const item = intentToFeedItem(intent, id, txDigest, walrusCid);
+        pushItem(item);
+        if (intent.condition?.type === "now") {
+          setSpent(s => Math.min(allowance, s + (intent.amount ?? 0)));
+        }
+        showToast(`Signed on-chain ✓ ${txDigest.slice(0, 8)}…`);
+        setPendingIntent(null);
+        return;
+      }
+    } catch (err) {
+      console.warn("On-chain sign failed, falling back to simulation:", err);
+    } finally {
+      setSigning(false);
+    }
+
+    // Fallback: simulate sign
+    simulateSign(intent, id);
+  }
+
+  function simulateSign(intent: Intent, id: number) {
     const item = intentToFeedItem(intent, id);
     pushItem(item);
 
@@ -184,7 +265,7 @@ export default function DashboardPage() {
         armedAt: Date.now(), status: "armed",
       });
       setRules(rs => [newRule, ...rs]);
-      showToast("Rule armed on-chain ✓");
+      showToast("Rule armed ✓");
     }
     setPendingIntent(null);
   }
@@ -230,7 +311,7 @@ export default function DashboardPage() {
             <Link href="/auth" onClick={() => { try { localStorage.removeItem("gr_session"); } catch {} }}>Log out</Link>
             <span className="me-chip" title="connected wallet">
               <span className="av">{buddy.emoji}</span>
-              0x7a…f3
+              {displayAddress}
             </span>
           </div>
         </nav>
@@ -268,7 +349,7 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      <ReviewSheet intent={pendingIntent} ctx={ctx} onSign={handleSign} onCancel={() => setPendingIntent(null)} />
+      <ReviewSheet intent={pendingIntent} ctx={ctx} onSign={handleSign} onCancel={() => setPendingIntent(null)} signing={signing} />
       <Toast msg={toast} />
     </>
   );
